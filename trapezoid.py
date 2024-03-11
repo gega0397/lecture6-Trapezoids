@@ -1,8 +1,10 @@
 import concurrent.futures
 import random
 import time
+import operator
 
 
+glob_results = {}
 def timeis(func):
     # Decorator that reports the execution time.
     def wrap(*args, **kwargs):
@@ -29,7 +31,7 @@ class Trapezoid:
 
     @staticmethod
     def check_other(other):
-        return issubclass(other.__class__, Trapezoid)
+        return isinstance(other, Trapezoid)
 
     def __init__(self, *args):
         if len(args) == 3:
@@ -113,97 +115,120 @@ class Square(Trapezoid):
         return f"Square:\n\tside:\t{self.a}"
 
 
-def problem(choices):
-    a, b, c = choices
-    a = Trapezoid(*a)
-    b = Rectangle(b[0], b[1])
-    c = Square(c[0])
+def problem(choices, problem_repetition):
+    operators = [operator.gt, operator.lt, operator.add, operator.mod, operator.mod, operator.le]
 
-    shapes = [a, b, c]
+    for i in range(problem_repetition):
+        a, b, c = choices
+        a = Trapezoid(*a)
+        b = Rectangle(b[0], b[1])
+        c = Square(c[0])
 
-    for i in range(1000):
-        for a in shapes:
-            for b in shapes:
-                _ = a > b
-                _ = a < b
-                _ = a + b
-                _ = a % b
-                _ = b % a
-                _ = a <= b
+        shapes = [a, b, c]
 
-    return True
+        _len = len(shapes)
+        for a in range(_len):
+            for b in range(a + 1, _len):
+                _a = shapes[a]
+                _b = shapes[b]
+                for op in operators:
+                    op(_a, _b)
 
 
-def _executor(func, repetitions, arr, max_processes, max_threads):
+def _executor(problem, arr, n_repetitions, problem_repetition, max_processes, max_threads):
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_processes) as executor:
         futures = []
-        _repetitions = repetitions // max_processes
+        n_repetitions = n_repetitions // max_processes
 
         if max_threads == 1:
             for _ in range(max_processes):
-                future = executor.submit(run_sequential, problem, arr, _repetitions)
+                future = executor.submit(run_sequential, problem, arr, n_repetitions, problem_repetition)
                 futures.append(future)
         else:
             for _ in range(max_processes):
-                future = executor.submit(_thread, func, _repetitions, arr, max_threads)
+                future = executor.submit(_thread, problem, arr, n_repetitions, problem_repetition, max_threads)
                 futures.append(future)
 
         for future in concurrent.futures.as_completed(futures):
             future.result()
 
 
-def _thread(func, repetitions, arr, max_threads):
+def _thread(problem, arr, n_repetitions, problem_repetition, max_threads):
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as thread_executor:
         futures = []
-        for _ in range(repetitions):
+        for _ in range(n_repetitions):
             choices = random.choices(arr, k=3)
-            future = thread_executor.submit(func, choices)
+            future = thread_executor.submit(problem, choices, problem_repetition)
             futures.append(future)
 
         for future in concurrent.futures.as_completed(futures):
             future.result()
 
 
-def run_threads(problem, arr, n_repetitions, n_threads):
+def run_threads(problem, arr, n_repetitions, problem_repetition, n_threads):
+    attempts = {}
     for max_thread in range(2, n_threads + 1):
         start = time.time()
-        _thread(problem, n_repetitions, arr, max_thread)
+        _thread(problem, arr, n_repetitions, problem_repetition, max_thread)
         end = time.time()
         print(f"took with {max_thread} threads:\t{end - start}")
+        attempts[f"0-{max_thread}"] = end - start
+    return attempts
 
 
-def run_sequential(problem, arr, n_repetitions, _print=False):
-
+def run_sequential(problem, arr, n_repetitions, problem_repetition, _print=False):
     if _print:
         start = time.time()
     for i in range(n_repetitions):
         choices = random.choices(arr, k=3)
-        problem(choices)
+        problem(choices, problem_repetition)
 
     if _print:
         end = time.time()
         print(f"took sequentially:\t{end - start}")
+        return {"0-0": end-start}
 
 
-def run_process_thread(problem, arr, n_repetitions, n_processes, n_threads):
+def run_process_thread(problem, arr, n_repetitions, problem_repetition, n_processes, n_threads):
     attempts = {}
     for max_process in range(2, n_processes + 1):
         for max_thread in range(1, n_threads + 1):
             start = time.time()
-            _executor(problem, n_repetitions, arr, max_process, max_thread)
+            _executor(problem, arr, n_repetitions, problem_repetition, max_process, max_thread)
             end = time.time()
             print(f"took with {max_process} process and {max_thread} thread:\t{end - start}")
             attempts[f"{max_process}-{max_thread}"] = end - start
+    return attempts
 
 
 if __name__ == "__main__":
     n_repetitions = 100
     n_processes = 3
     n_threads = 5
+    problem_repetitions = 10
     arr = generate_three()
 
-    run_process_thread(problem, arr, n_repetitions, n_processes, n_threads)
+    scores = {}
 
-    run_threads(problem, arr, n_repetitions, n_threads)
+    for problem_repetition in range(problem_repetitions):
 
-    run_sequential(problem, arr, n_repetitions)
+        print("problem rep: \t", problem_repetition)
+        scores[problem_repetition] = {}
+
+        d1 = run_process_thread(problem, arr, n_repetitions, problem_repetition, n_processes, n_threads)
+
+        d2 = run_threads(problem, arr, n_repetitions, problem_repetition, n_threads)
+
+        d3 = run_sequential(problem, arr, n_repetitions, problem_repetition, _print=True)
+
+        scores[problem_repetition].update(d1)
+        scores[problem_repetition].update(d2)
+        scores[problem_repetition].update(d3)
+
+    max_scores = {}
+    for k, v in scores.items():
+        #print(k,v)
+        max_scores[k] = max(v, key=v.get)
+    print(max_scores)
+    for k,v in max_scores.items():
+        print(k, v, scores[k][v])
