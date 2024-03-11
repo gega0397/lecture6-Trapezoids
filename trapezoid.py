@@ -132,8 +132,7 @@ def problem(choices, problem_repetition):
                 _a = shapes[a]
                 _b = shapes[b]
                 for op in operators:
-                    op(_a, _b)
-
+                    opa = op(_a, _b)
 
 def _executor(problem, arr, n_repetitions, problem_repetition, max_processes, max_threads):
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_processes) as executor:
@@ -205,7 +204,7 @@ if __name__ == "__main__":
     n_repetitions = 100
     n_processes = 3
     n_threads = 5
-    problem_repetitions = 10
+    problem_repetitions = 100
     arr = generate_three()
 
     scores = {}
@@ -228,7 +227,6 @@ if __name__ == "__main__":
     max_scores = {}
     for k, v in scores.items():
         #print(k,v)
-        max_scores[k] = max(v, key=v.get)
-    print(max_scores)
+        max_scores[k] = min(v, key=v.get)
     for k,v in max_scores.items():
         print(k, v, scores[k][v])
