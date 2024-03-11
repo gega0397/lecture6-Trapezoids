@@ -139,9 +139,14 @@ def _executor(func, repetitions, arr, max_processes, max_threads):
         futures = []
         _repetitions = repetitions // max_processes
 
-        for _ in range(max_processes):
-            future = executor.submit(_thread, func, _repetitions, arr, max_threads)
-            futures.append(future)
+        if max_threads == 1:
+            for _ in range(max_processes):
+                future = executor.submit(run_sequential, problem, arr, _repetitions)
+                futures.append(future)
+        else:
+            for _ in range(max_processes):
+                future = executor.submit(_thread, func, _repetitions, arr, max_threads)
+                futures.append(future)
 
         for future in concurrent.futures.as_completed(futures):
             future.result()
@@ -158,37 +163,43 @@ def _thread(func, repetitions, arr, max_threads):
         for future in concurrent.futures.as_completed(futures):
             future.result()
 
-def run_threads(problem, n_threads, arr, n_repetitions):
+
+def run_threads(problem, arr, n_repetitions, n_threads):
     for max_thread in range(2, n_threads + 1):
         start = time.time()
         _thread(problem, n_repetitions, arr, max_thread)
         end = time.time()
         print(f"took with {max_thread} threads:\t{end - start}")
 
-def run_sequential(problem, arr, n_repetitions):
-    start = time.time()
+
+def run_sequential(problem, arr, n_repetitions, _print=False):
+
+    if _print:
+        start = time.time()
     for i in range(n_repetitions):
         choices = random.choices(arr, k=3)
         problem(choices)
 
-    end = time.time()
-    print(f"took sequentially:\t{end - start}")
+    if _print:
+        end = time.time()
+        print(f"took sequentially:\t{end - start}")
+
 
 def run_process_thread(problem, arr, n_repetitions, n_processes, n_threads):
     attempts = {}
     for max_process in range(2, n_processes + 1):
-        for max_thread in range(2, n_threads + 1):
+        for max_thread in range(1, n_threads + 1):
             start = time.time()
-            task = _executor(problem, n_repetitions, arr, max_process, max_thread)
+            _executor(problem, n_repetitions, arr, max_process, max_thread)
             end = time.time()
-            print(f"took with {max_process} and {max_thread}:\t{end - start}")
+            print(f"took with {max_process} process and {max_thread} thread:\t{end - start}")
             attempts[f"{max_process}-{max_thread}"] = end - start
 
 
 if __name__ == "__main__":
     n_repetitions = 100
     n_processes = 3
-    n_threads = 10
+    n_threads = 5
     arr = generate_three()
 
     run_process_thread(problem, arr, n_repetitions, n_processes, n_threads)
@@ -196,4 +207,3 @@ if __name__ == "__main__":
     run_threads(problem, arr, n_repetitions, n_threads)
 
     run_sequential(problem, arr, n_repetitions)
-
